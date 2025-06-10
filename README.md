@@ -15,17 +15,38 @@ brew install mongodb-community
 
 ## Démarrer MongoDB :
 
-``
-bash# Linux/macOS
+````
+# Linux/macOS
 sudo systemctl start mongodb
+
 # ou
 mongod
 
 # Windows : démarrer le service MongoDB
 
-``
+````
 
-## kdkeojdeo
-2. Installation Python
-bash# Créer un environnement virtuel (recommandé)
+## Installation Python
+
+### Créer un environnement virtuel 
+````
 python -m venv venv
+````
+
+### Démarrer l'environnement virtuel 
+````
+# Linux/macOS :
+source venv/bin/activate
+# Windows :
+venv\Scripts\activate
+````
+
+##  Installer les dépendances
+````
+pip install -r requirements.txt
+````
+
+## Lancement du script
+````
+python scraper_bdm.py
+````
