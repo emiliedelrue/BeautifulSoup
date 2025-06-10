@@ -6,7 +6,7 @@ import re
 import time
 import logging
 from urllib.parse import urljoin, urlparse
-import json
+import random
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -36,71 +36,283 @@ class BlogDuModerateurScraper:
         except Exception as e:
             logger.error(f"Erreur connexion MongoDB: {e}")
             raise
+        
+        # Vérifier robots.txt
+        self.check_robots_txt()
+
+    def check_robots_txt(self):
+        """Vérifie le fichier robots.txt"""
+        try:
+            robots_url = urljoin(self.base_url, '/robots.txt')
+            response = self.session.get(robots_url)
+            if response.status_code == 200:
+                logger.info("Robots.txt récupéré avec succès")
+                return response.text
+        except Exception as e:
+            logger.warning(f"Impossible de récupérer robots.txt: {e}")
+        return None
+
+    def inspect_page_structure(self, url=None):
+        """Analyse la structure de la page pour debugging"""
+        if not url:
+            url = self.base_url
+        
+        response = self.get_page_with_retry(url)
+        if not response:
+            return
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        print(f"\n=== ANALYSE DE LA STRUCTURE DE {url} ===")
+        
+        # Rechercher tous les types de liens
+        all_links = soup.find_all('a', href=True)
+        
+        print(f"Total de liens trouvés: {len(all_links)}")
+        
+        # Analyser les patterns d'URLs
+        url_patterns = {}
+        for link in all_links:
+            href = link.get('href')
+            if href:
+                full_url = urljoin(self.base_url, href)
+                # Extraire le pattern de l'URL
+                path = urlparse(full_url).path
+                
+                # Grouper par patterns
+                if re.search(r'/\d{4}/\d{2}/\d{2}/', path):
+                    pattern = "DATE_ARTICLE"
+                elif '/tag/' in path:
+                    pattern = "TAG"
+                elif '/category/' in path or '/categorie/' in path:
+                    pattern = "CATEGORY"
+                elif path.count('/') >= 2 and len(path) > 10:
+                    pattern = "POTENTIAL_ARTICLE"
+                else:
+                    pattern = "OTHER"
+                
+                if pattern not in url_patterns:
+                    url_patterns[pattern] = []
+                url_patterns[pattern].append(full_url)
+        
+        # Afficher les résultats
+        for pattern, urls in url_patterns.items():
+            print(f"\n{pattern}: {len(urls)} URLs")
+            for url in urls[:3]:  # Afficher seulement les 3 premiers
+                print(f"  - {url}")
+            if len(urls) > 3:
+                print(f"  ... et {len(urls) - 3} autres")
+
+    def add_random_delay(self, min_delay=1, max_delay=3):
+        """Ajoute un délai aléatoire entre les requêtes"""
+        delay = random.uniform(min_delay, max_delay)
+        time.sleep(delay)
+
+    def get_page_with_retry(self, url, max_retries=3):
+        """Récupère une page avec système de retry"""
+        for attempt in range(max_retries):
+            try:
+                response = self.session.get(url, timeout=15)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as e:
+                logger.warning(f"Tentative {attempt + 1}/{max_retries} échouée pour {url}: {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                else:
+                    logger.error(f"Échec définitif pour {url}")
+                    return None
 
     def get_page(self, url):
         """Récupère une page web avec gestion d'erreurs"""
-        try:
-            response = self.session.get(url, timeout=10)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as e:
-            logger.error(f"Erreur lors de la récupération de {url}: {e}")
-            return None
+        return self.get_page_with_retry(url)
 
-    def extract_article_urls(self, page_url=None):
-        """
-        Extrait les URLs des articles depuis la page d'accueil ou une page donnée
+    def is_article_url(self, url):
+        """Détermine si une URL est celle d'un article (version améliorée)"""
+        # Exclure les URLs non-articles
+        exclude_patterns = [
+            r'/page/\d+',
+            r'/category/',
+            r'/categorie/',
+            r'/tag/',
+            r'/author/',
+            r'/search',
+            r'/contact',
+            r'/about',
+            r'\.jpg$',
+            r'\.png$',
+            r'\.pdf$',
+            r'#',
+            r'\?',
+            r'/feed',
+            r'/rss'
+        ]
         
-        Args:
-            page_url (str): URL de la page à scraper (par défaut: page d'accueil)
-            
-        Returns:
-            list: Liste des URLs d'articles
+        for pattern in exclude_patterns:
+            if re.search(pattern, url):
+                return False
+        
+        # Patterns d'articles typiques
+        article_patterns = [
+            r'/\d{4}/\d{2}/\d{2}/',  # Format date
+            r'/\d{4}/\d{2}/',         # Format année/mois
+            r'/[^/]+/$',              # Slug d'article
+        ]
+        
+        # L'URL doit avoir un certain format et une certaine longueur
+        parsed = urlparse(url)
+        path = parsed.path
+        
+        # Vérifier que le path a une profondeur raisonnable et une longueur minimale
+        if (len(path) > 10 and 
+            path.count('/') >= 2 and  # Au moins 2 niveaux
+            not path.endswith('.html') and  # Eviter les pages statiques
+            self.base_url in url):
+            return True
+        
+        return False
+
+    def extract_article_urls(self, page_url=None, max_pages=1):
+        """
+        Version améliorée pour extraire les URLs d'articles
         """
         if not page_url:
             page_url = self.base_url
             
-        response = self.get_page(page_url)
-        if not response:
-            return []
+        all_article_urls = set()  # Utiliser un set pour éviter les doublons
+        
+        for page in range(1, max_pages + 1):
+            if page == 1:
+                current_url = page_url
+            else:
+                # Essayer différents formats de pagination
+                pagination_formats = [
+                    f"{page_url}/page/{page}",
+                    f"{page_url}?page={page}",
+                    f"{page_url}/page-{page}"
+                ]
+                current_url = pagination_formats[0]  # Commencer par le premier format
             
-        soup = BeautifulSoup(response.content, 'html.parser')
-        article_urls = []
+            response = self.get_page(current_url)
+            if not response:
+                break
+                
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Stratégie plus large pour trouver les articles
+            potential_links = []
+            
+            # 1. Chercher dans les éléments article
+            articles = soup.find_all(['article', 'div'], class_=re.compile(r'(post|article|entry|item)'))
+            for article in articles:
+                links = article.find_all('a', href=True)
+                potential_links.extend(links)
+            
+            # 2. Chercher des liens avec des classes spécifiques
+            specific_selectors = [
+                'a[href*="/20"]',  # URLs with year
+                '.post-title a',
+                '.entry-title a',
+                '.article-title a',
+                'h1 a, h2 a, h3 a',  # Titles
+                '.title a'
+            ]
+            
+            for selector in specific_selectors:
+                links = soup.select(selector)
+                potential_links.extend(links)
+            
+            # 3. Fallback: tous les liens
+            if not potential_links:
+                potential_links = soup.find_all('a', href=True)
+            
+            # Traiter tous les liens potentiels
+            page_articles = 0
+            for link in potential_links:
+                href = link.get('href')
+                if href:
+                    full_url = urljoin(self.base_url, href)
+                    
+                    # Nettoyer l'URL (supprimer fragments et paramètres)
+                    clean_url = full_url.split('#')[0].split('?')[0]
+                    
+                    if (clean_url not in all_article_urls and 
+                        self.base_url in clean_url and
+                        self.is_article_url(clean_url)):
+                        all_article_urls.add(clean_url)
+                        page_articles += 1
+            
+            logger.info(f"Page {page}: Trouvé {page_articles} nouveaux articles")
+            
+            # Si aucun article trouvé, essayer une approche différente
+            if page_articles == 0 and page == 1:
+                logger.info("Aucun article trouvé avec la méthode standard, essai d'une approche alternative...")
+                self.inspect_page_structure(current_url)
+                
+                # Essayer de trouver des articles avec une approche plus permissive
+                all_links = soup.find_all('a', href=True)
+                for link in all_links:
+                    href = link.get('href')
+                    text = link.get_text().strip()
+                    
+                    if href and text and len(text) > 10:  # Liens avec du texte substantiel
+                        full_url = urljoin(self.base_url, href)
+                        clean_url = full_url.split('#')[0].split('?')[0]
+                        
+                        # Critères plus permissifs
+                        if (clean_url not in all_article_urls and
+                            self.base_url in clean_url and
+                            len(urlparse(clean_url).path) > 5 and
+                            not any(exclude in clean_url.lower() for exclude in 
+                                   ['contact', 'about', 'category', 'tag', 'page/', 'author'])):
+                            all_article_urls.add(clean_url)
+                            page_articles += 1
+                            
+                            if page_articles >= 10:  # Limiter pour le test
+                                break
+                
+                logger.info(f"Approche alternative: {page_articles} articles trouvés")
+            
+            if page_articles == 0:
+                break
+                
+            self.add_random_delay()
         
-        # Recherche des liens d'articles (adapté à la structure du site)
-        article_links = soup.find_all('a', href=True)
+        article_list = list(all_article_urls)
+        logger.info(f"Total: {len(article_list)} URLs d'articles uniques trouvées")
         
-        for link in article_links:
-            href = link.get('href')
-            if href and ('article' in href or '/blog/' in href):
-                full_url = urljoin(self.base_url, href)
-                if full_url not in article_urls and self.base_url in full_url:
-                    article_urls.append(full_url)
+        # Afficher quelques exemples pour debugging
+        if article_list:
+            logger.info("Exemples d'URLs trouvées:")
+            for url in article_list[:5]:
+                logger.info(f"  - {url}")
         
-        logger.info(f"Trouvé {len(article_urls)} URLs d'articles")
-        return article_urls
+        return article_list
 
     def clean_text(self, text):
         """Nettoie et formate le texte"""
         if not text:
             return ""
         text = re.sub(r'\s+', ' ', text.strip())
+        text = re.sub(r'[^\w\s\-\.\,\;\:\!\?\(\)\[\]\{\}\"\'àâäéèêëïîôöùûüÿç]', '', text)
         return text
 
     def extract_date(self, soup):
-        """Extrait la date de publication au format AAAA-MM-JJ"""
+        """Extrait la date de publication"""
         date_selectors = [
             'time[datetime]',
             '.date',
             '.published',
             '[class*="date"]',
-            '[class*="time"]'
+            '[class*="time"]',
+            'meta[property="article:published_time"]',
+            'meta[name="date"]'
         ]
         
         for selector in date_selectors:
             date_element = soup.select_one(selector)
             if date_element:
-                datetime_attr = date_element.get('datetime')
+                datetime_attr = date_element.get('datetime') or date_element.get('content')
                 if datetime_attr:
                     try:
                         dt = datetime.fromisoformat(datetime_attr.replace('Z', '+00:00'))
@@ -111,324 +323,232 @@ class BlogDuModerateurScraper:
                 date_text = date_element.get_text().strip()
                 if date_text:
                     date_patterns = [
-                        r'(\d{1,2})/(\d{1,2})/(\d{4})',  # JJ/MM/AAAA
-                        r'(\d{1,2})-(\d{1,2})-(\d{4})',  # JJ-MM-AAAA
-                        r'(\d{4})-(\d{1,2})-(\d{1,2})',  # AAAA-MM-JJ
+                        r'(\d{1,2})/(\d{1,2})/(\d{4})',
+                        r'(\d{4})-(\d{1,2})-(\d{1,2})',
+                        r'(\d{1,2})\s+(janvier|février|mars|avril|mai|juin|juillet|août|septembre|octobre|novembre|décembre)\s+(\d{4})'
                     ]
                     
                     for pattern in date_patterns:
                         match = re.search(pattern, date_text)
                         if match:
                             try:
-                                if pattern == r'(\d{4})-(\d{1,2})-(\d{1,2})':
-                                    year, month, day = match.groups()
-                                else:
+                                if '/' in pattern:
                                     day, month, year = match.groups()
-                                return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                                    return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                                elif '-' in pattern:
+                                    year, month, day = match.groups()
+                                    return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
                             except:
                                 continue
         
-        return datetime.now().strftime('%Y-%m-%d')  
+        return datetime.now().strftime('%Y-%m-%d')
 
-    def extract_images(self, soup):
-        """Extrait les images de l'article avec leurs légendes"""
-        images_dict = {}
-        images = soup.find_all('img')
+    def extract_content(self, soup):
+        """Extraction plus précise du contenu"""
+        # Supprimer les éléments indésirables
+        for unwanted in soup.find_all(['script', 'style', 'nav', 'header', 
+                                      'footer', 'sidebar', 'advertisement', 'aside']):
+            unwanted.decompose()
         
-        for i, img in enumerate(images):
-            src = img.get('src') or img.get('data-src')
-            if src:
-                img_url = urljoin(self.base_url, src)
-                
-                caption = (
-                    img.get('alt') or 
-                    img.get('title') or
-                    (img.find_next('figcaption').get_text().strip() if img.find_next('figcaption') else '') or
-                    ''
-                )
-                
-                images_dict[f"image_{i+1}"] = {
-                    "url": img_url,
-                    "caption": self.clean_text(caption)
-                }
+        # Sélecteurs spécifiques
+        content_selectors = [
+            '.entry-content',
+            '.post-content',
+            '.article-content',
+            'article .content',
+            '.post-body',
+            '.article-body',
+            'main p',
+            'article p'
+        ]
         
-        return images_dict
+        content_parts = []
+        for selector in content_selectors:
+            elements = soup.select(selector)
+            for element in elements:
+                text = self.clean_text(element.get_text())
+                if len(text) > 50:
+                    content_parts.append(text)
+        
+        # Fallback: chercher les paragraphes
+        if not content_parts:
+            paragraphs = soup.find_all('p')
+            for p in paragraphs:
+                text = self.clean_text(p.get_text())
+                if len(text) > 50:
+                    content_parts.append(text)
+        
+        return ' '.join(content_parts) if content_parts else ""
 
-    def scrape_article(self, article_url):
-        """
-        Scrape un article complet
+    def extract_metadata(self, soup):
+        """Extrait les métadonnées"""
+        metadata = {}
         
-        Args:
-            article_url (str): URL de l'article
-            
-        Returns:
-            dict: Données de l'article ou None si erreur
-        """
-        logger.info(f"Scraping article: {article_url}")
+        # Titre
+        title_selectors = ['h1', 'title', '.entry-title', '.post-title', '.article-title']
+        for selector in title_selectors:
+            title_element = soup.select_one(selector)
+            if title_element:
+                metadata['title'] = self.clean_text(title_element.get_text())
+                break
         
-        response = self.get_page(article_url)
+        # Description
+        meta_description = soup.find('meta', attrs={'name': 'description'})
+        if meta_description:
+            metadata['summary'] = self.clean_text(meta_description.get('content', ''))
+        
+        # Image
+        og_image = soup.find('meta', property='og:image')
+        if og_image:
+            metadata['thumbnail'] = og_image.get('content', '')
+        
+        # Auteur
+        author_selectors = ['.author', '.by-author', '[class*="author"]']
+        for selector in author_selectors:
+            author_element = soup.select_one(selector)
+            if author_element:
+                metadata['author'] = self.clean_text(author_element.get_text())
+                break
+        
+        return metadata
+
+    def scrape_article(self, url):
+        """Scrape un article complet"""
+        response = self.get_page_with_retry(url)
         if not response:
             return None
             
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # 1. Titre de l'article
-        title_selectors = ['h1', '.title', '[class*="title"]', 'title']
-        title = ""
-        for selector in title_selectors:
-            title_element = soup.select_one(selector)
-            if title_element:
-                title = self.clean_text(title_element.get_text())
-                break
+        # Extraire les métadonnées
+        article_data = self.extract_metadata(soup)
         
-        # 2. Image miniature principale
-        thumbnail_selectors = [
-            '.featured-image img',
-            '.thumbnail img',
-            '.hero-image img',
-            'article img:first-of-type',
-            '.post-thumbnail img'
-        ]
-        thumbnail = ""
-        for selector in thumbnail_selectors:
-            thumb_element = soup.select_one(selector)
-            if thumb_element:
-                src = thumb_element.get('src') or thumb_element.get('data-src')
-                if src:
-                    thumbnail = urljoin(self.base_url, src)
-                    break
+        # Ajouter les données de base
+        content = self.extract_content(soup)
+        article_data.update({
+            'url': url,
+            'content': content,
+            'publication_date': self.extract_date(soup),
+            'scraped_at': datetime.now().isoformat(),
+            'word_count': len(content.split()) if content else 0
+        })
         
-        # 3. Sous-catégorie
-        category_selectors = [
-            '.category',
-            '.tag',
-            '[class*="category"]',
-            '.breadcrumb a:last-child',
-            'nav a:last-child'
-        ]
-        subcategory = ""
-        for selector in category_selectors:
-            cat_element = soup.select_one(selector)
-            if cat_element:
-                subcategory = self.clean_text(cat_element.get_text())
-                break
-        
-        # 4. Résumé/chapô
-        summary_selectors = [
-            '.excerpt',
-            '.summary',
-            '.lead',
-            '.chapo',
-            '.description',
-            'article p:first-of-type'
-        ]
-        summary = ""
-        for selector in summary_selectors:
-            summary_element = soup.select_one(selector)
-            if summary_element:
-                summary = self.clean_text(summary_element.get_text())
-                if len(summary) > 50:  # S'assurer que c'est un vrai résumé
-                    break
-        
-        # 5. Date de publication
-        publication_date = self.extract_date(soup)
-        
-        # 6. Auteur
-        author_selectors = [
-            '.author',
-            '.byline',
-            '[class*="author"]',
-            '[rel="author"]'
-        ]
-        author = ""
-        for selector in author_selectors:
-            author_element = soup.select_one(selector)
-            if author_element:
-                author = self.clean_text(author_element.get_text())
-                break
-        
-        # 7. Contenu de l'article
-        content_selectors = [
-            '.content',
-            '.post-content',
-            'article',
-            '.entry-content',
-            'main'
-        ]
-        content = ""
-        for selector in content_selectors:
-            content_element = soup.select_one(selector)
-            if content_element:
-                for unwanted in content_element.find_all(['script', 'style', 'nav', 'header', 'footer']):
-                    unwanted.decompose()
-                content = self.clean_text(content_element.get_text())
-                if len(content) > 200:  
-                    break
-        
-        # 8. Images de l'article
-        images = self.extract_images(soup)
-        
-        article_data = {
-            "url": article_url,
-            "title": title,
-            "thumbnail": thumbnail,
-            "subcategory": subcategory,
-            "summary": summary,
-            "publication_date": publication_date,
-            "author": author,
-            "content": content,
-            "images": images,
-            "scraped_at": datetime.now().isoformat()
-        }
-        
+        # Validation basique
+        if not article_data.get('title') and not content:
+            logger.warning(f"Article sans contenu substantiel: {url}")
+            return None
+            
         return article_data
 
+    def article_exists(self, url):
+        """Vérifie si un article existe déjà"""
+        return self.collection.count_documents({'url': url}) > 0
+
     def save_article(self, article_data):
-        """Sauvegarde un article dans MongoDB"""
+        """Sauvegarde un article"""
         try:
-            existing = self.collection.find_one({"url": article_data["url"]})
-            if existing:
-                logger.info(f"Article déjà existant: {article_data['title']}")
+            if self.article_exists(article_data['url']):
+                logger.info(f"Article déjà existant: {article_data['url']}")
                 return False
             
             result = self.collection.insert_one(article_data)
-            logger.info(f"Article sauvegardé: {article_data['title']}")
+            logger.info(f"Article sauvegardé: {article_data.get('title', 'Sans titre')}")
             return True
             
         except Exception as e:
-            logger.error(f"Erreur lors de la sauvegarde: {e}")
+            logger.error(f"Erreur sauvegarde: {e}")
             return False
 
-    def scrape_multiple_articles(self, max_articles=10):
-        """
-        Scrape plusieurs articles
+    def scrape_multiple_articles(self, urls, delay_range=(1, 3)):
+        """Scrape plusieurs articles"""
+        stats = {
+            'total': len(urls),
+            'success': 0,
+            'failed': 0,
+            'already_exists': 0,
+            'start_time': datetime.now()
+        }
         
-        Args:
-            max_articles (int): Nombre maximum d'articles à scraper
-        """
-        logger.info(f"Début du scraping de {max_articles} articles")
+        for i, url in enumerate(urls, 1):
+            logger.info(f"Scraping article {i}/{len(urls)}: {url}")
+            
+            if self.article_exists(url):
+                stats['already_exists'] += 1
+                continue
+            
+            article_data = self.scrape_article(url)
+            
+            if article_data and self.save_article(article_data):
+                stats['success'] += 1
+            else:
+                stats['failed'] += 1
+            
+            if i < len(urls):
+                self.add_random_delay(delay_range[0], delay_range[1])
         
-        article_urls = self.extract_article_urls()
+        stats['end_time'] = datetime.now()
+        stats['duration'] = (stats['end_time'] - stats['start_time']).total_seconds()
+        
+        return stats
+
+    def get_scraping_stats(self):
+        """Statistiques de la base"""
+        try:
+            total_articles = self.collection.count_documents({})
+            return {"total_articles": total_articles}
+        except Exception as e:
+            logger.error(f"Erreur statistiques: {e}")
+            return {}
+
+    def run_full_scraping(self, max_pages=5):
+        """Lance un scraping complet"""
+        logger.info("Début du scraping complet")
+        
+        article_urls = self.extract_article_urls(max_pages=max_pages)
         
         if not article_urls:
-            logger.warning("Aucun article trouvé")
-            return
+            logger.warning("Aucune URL d'article trouvée")
+            return {"error": "Aucune URL trouvée"}
         
-        scraped_count = 0
-        for url in article_urls[:max_articles]:
-            try:
-                article_data = self.scrape_article(url)
-                if article_data:
-                    if self.save_article(article_data):
-                        scraped_count += 1
-                
-                time.sleep(1)
-                
-            except Exception as e:
-                logger.error(f"Erreur lors du scraping de {url}: {e}")
-                continue
+        scraping_stats = self.scrape_multiple_articles(article_urls)
+        db_stats = self.get_scraping_stats()
         
-        logger.info(f"Scraping terminé. {scraped_count} nouveaux articles sauvegardés.")
-
-    def get_articles_by_category(self, category):
-        """
-        Retourne tous les articles d'une catégorie
+        final_stats = {
+            "scraping": scraping_stats,
+            "database": db_stats
+        }
         
-        Args:
-            category (str): Nom de la catégorie
-            
-        Returns:
-            list: Liste des articles
-        """
-        try:
-            articles = list(self.collection.find(
-                {"subcategory": {"$regex": category, "$options": "i"}},
-                {"_id": 0} 
-            ))
-            logger.info(f"Trouvé {len(articles)} articles dans la catégorie '{category}'")
-            return articles
-        except Exception as e:
-            logger.error(f"Erreur lors de la recherche: {e}")
-            return []
-
-    def get_all_categories(self):
-        """Retourne toutes les catégories disponibles"""
-        try:
-            categories = self.collection.distinct("subcategory")
-            return [cat for cat in categories if cat]  
-        except Exception as e:
-            logger.error(f"Erreur lors de la récupération des catégories: {e}")
-            return []
+        logger.info("Scraping terminé")
+        logger.info(f"Résultats: {scraping_stats['success']} succès, {scraping_stats['failed']} échecs")
+        
+        return final_stats
 
     def close(self):
-        """Ferme la connexion MongoDB"""
-        if hasattr(self, 'client'):
+        """Ferme les connexions"""
+        try:
             self.client.close()
-            logger.info("Connexion MongoDB fermée")
+            self.session.close()
+            logger.info("Connexions fermées")
+        except Exception as e:
+            logger.error(f"Erreur fermeture: {e}")
 
 
 def main():
     """Fonction principale"""
-    print("=== Scraper Blog du Modérateur ===\n")
+    scraper = BlogDuModerateurScraper()
     
     try:
-        scraper = BlogDuModerateurScraper()
-    except Exception as e:
-        print(f"Erreur d'initialisation: {e}")
-        return
-    
-    while True:
-        print("\nOptions disponibles:")
-        print("1. Scraper des articles")
-        print("2. Rechercher par catégorie")
-        print("3. Afficher toutes les catégories")
-        print("4. Quitter")
+        # Scraping avec plus de debugging
+        stats = scraper.run_full_scraping(max_pages=2)
+        print("\n=== RÉSULTATS FINAUX ===")
+        print(f"Total articles en base: {stats.get('database', {}).get('total_articles', 0)}")
+        if 'scraping' in stats:
+            print(f"Articles traités: {stats['scraping'].get('success', 0)}")
+            print(f"Articles échoués: {stats['scraping'].get('failed', 0)}")
+            print(f"Articles déjà existants: {stats['scraping'].get('already_exists', 0)}")
         
-        choice = input("\nVotre choix (1-4): ").strip()
-        
-        if choice == "1":
-            try:
-                nb_articles = int(input("Nombre d'articles à scraper (défaut: 5): ") or "5")
-                scraper.scrape_multiple_articles(nb_articles)
-            except ValueError:
-                print("Nombre invalide, utilisation de 5 par défaut")
-                scraper.scrape_multiple_articles(5)
-        
-        elif choice == "2":
-            category = input("Nom de la catégorie: ").strip()
-            if category:
-                articles = scraper.get_articles_by_category(category)
-                if articles:
-                    print(f"\n=== Articles de la catégorie '{category}' ===")
-                    for i, article in enumerate(articles, 1):
-                        print(f"\n{i}. {article.get('title', 'Sans titre')}")
-                        print(f"   Auteur: {article.get('author', 'Inconnu')}")
-                        print(f"   Date: {article.get('publication_date', 'Inconnue')}")
-                        print(f"   URL: {article.get('url', '')}")
-                        if article.get('summary'):
-                            print(f"   Résumé: {article['summary'][:100]}...")
-                else:
-                    print(f"Aucun article trouvé pour la catégorie '{category}'")
-            else:
-                print("Nom de catégorie requis")
-        
-        elif choice == "3":
-            categories = scraper.get_all_categories()
-            if categories:
-                print("\n=== Catégories disponibles ===")
-                for i, cat in enumerate(categories, 1):
-                    print(f"{i}. {cat}")
-            else:
-                print("Aucune catégorie trouvée")
-        
-        elif choice == "4":
-            print("Fermeture du programme...")
-            break
-        
-        else:
-            print("Choix invalide")
-    
-    scraper.close()
+    finally:
+        scraper.close()
 
 
 if __name__ == "__main__":
