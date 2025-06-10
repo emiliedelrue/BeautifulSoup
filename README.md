@@ -28,9 +28,14 @@ mongod
 
 ## Installation Python
 
+### Python 
+````
+brew install python3
+````
+
 ### Créer un environnement virtuel 
 ````
-python -m venv venv
+python3 -m venv venv  
 ````
 
 ### Démarrer l'environnement virtuel 
