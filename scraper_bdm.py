@@ -2,11 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pymongo
 from datetime import datetime
-import urllib3
 import re
-
-# Désactiver le warning SSL
-urllib3.disable_warnings(urllib3.exceptions.NotOpenSSLWarning)
 
 class BDMScraperDetailed:
     def __init__(self):
