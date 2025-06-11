@@ -11,8 +11,7 @@ class BDMScraperDetailed:
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
-        
-        # MongoDB
+    
         try:
             self.client = pymongo.MongoClient("mongodb://localhost:27017/")
             self.db = self.client.blogdumoderateur
@@ -107,7 +106,6 @@ class BDMScraperDetailed:
             for selector in cat_selectors:
                 cats = soup.select(selector)
                 if cats:
-                    # Prendre la première catégorie trouvée
                     sous_categorie = cats[0].get_text().strip()
                     print(f"       Trouvé avec '{selector}': {sous_categorie}")
                     break
@@ -152,8 +150,7 @@ class BDMScraperDetailed:
                             break
                         except:
                             pass
-                    
-                    # Essayer d'extraire une date du texte
+
                     match = re.search(r'(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})', date_text)
                     if match:
                         day, month, year = match.groups()
@@ -185,7 +182,7 @@ class BDMScraperDetailed:
             
             # =================== POINT 7: CONTENU NORMALISÉ ===================
             print(f"\n   POINT 7 - Le contenu de l'article (normalisé):")
-            contenu = resume  # Utiliser le résumé comme contenu normalisé
+            contenu = resume  
             print(f"       Contenu normalisé: {len(contenu)} caractères")
             print(f"       Aperçu normalisé: {contenu[:80]}...")
             
@@ -203,7 +200,6 @@ class BDMScraperDetailed:
                 title_attr = img.get('title', '')
                 
                 if src:
-                    # URL complète si nécessaire
                     if src.startswith('/'):
                         src = self.base_url + src
                     elif not src.startswith('http'):
@@ -222,7 +218,6 @@ class BDMScraperDetailed:
             # =================== POINT 9: SAUVEGARDE MONGODB ===================
             print(f"\n  POINT 9 - Sauvegarde des données dans une collection MongoDB:")
             
-            # Informations supplémentaires
             article_data.update({
                 'url': url,
                 'date_scraping': datetime.now().isoformat(),
@@ -243,7 +238,6 @@ class BDMScraperDetailed:
     def save_to_mongodb(self, article):
         """Sauvegarde en MongoDB avec détails"""
         try:
-            # Vérifier si existe déjà
             existing = self.collection.find_one({'url': article['url']})
             if existing:
                 print(f"       Article déjà en base (ID: {existing['_id']})")
