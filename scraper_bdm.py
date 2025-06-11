@@ -303,7 +303,7 @@ class BDMScraperDetailed:
         print(f" Total en base MongoDB: {self.collection.count_documents({})}")
         
         # Afficher les derniers articles en base
-        print(f"\n📋 Derniers articles en base:")
+        print(f"\n Derniers articles en base:")
         for article in self.collection.find().sort('_id', -1).limit(3):
             print(f"   • {article['titre'][:50]}")
             print(f"     URL: {article['url'][:60]}...")
