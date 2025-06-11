@@ -21,13 +21,13 @@ class BDMScraperDetailed:
             self.client = pymongo.MongoClient("mongodb://localhost:27017/")
             self.db = self.client.blogdumoderateur
             self.collection = self.db.articles
-            print("✅ MongoDB connecté")
+            print("MongoDB connecté")
         except Exception as e:
-            print(f"❌ Erreur MongoDB: {e}")
+            print(f" Erreur MongoDB: {e}")
 
     def get_articles_from_homepage(self, max_articles=5):
         """Récupère les articles depuis la page d'accueil"""
-        print("🔍 Récupération des articles...")
+        print(" Récupération des articles...")
         
         try:
             response = self.session.get(self.base_url)
@@ -53,26 +53,26 @@ class BDMScraperDetailed:
                         'title_preview': title[:60] + "..." if len(title) > 60 else title
                     })
             
-            print(f"📰 {len(article_urls)} articles trouvés\n")
+            print(f" {len(article_urls)} articles trouvés\n")
             return article_urls
             
         except Exception as e:
-            print(f"❌ Erreur récupération articles: {e}")
+            print(f"Erreur récupération articles: {e}")
             return []
 
     def scrape_article_detailed(self, url):
         """Scrape un article avec détail des 8 points du TP"""
-        print(f"🔗 URL: {url}")
+        print(f" URL: {url}")
         
         try:
             response = self.session.get(url)
             soup = BeautifulSoup(response.content, 'html.parser')
-            print(f"   📥 Page chargée ({len(response.content)} caractères)")
+            print(f"  Page chargée ({len(response.content)} caractères)")
             
             article_data = {}
             
             # =================== POINT 1: TITRE ===================
-            print(f"\n   📌 POINT 1 - Le titre de l'article:")
+            print(f"\n   POINT 1 - Le titre de l'article:")
             titre = "Titre non trouvé"
             title_selectors = ['h1', '.entry-title', '.post-title', 'title']
             
@@ -80,15 +80,15 @@ class BDMScraperDetailed:
                 title_elem = soup.select_one(selector)
                 if title_elem and title_elem.get_text().strip():
                     titre = title_elem.get_text().strip()
-                    print(f"      ✅ Trouvé avec '{selector}': {titre}")
+                    print(f"      Trouvé avec '{selector}': {titre}")
                     break
                 else:
-                    print(f"      ❌ Pas trouvé avec '{selector}'")
+                    print(f"      Pas trouvé avec '{selector}'")
             
             article_data['titre'] = titre
             
             # =================== POINT 2: IMAGE MINIATURE ===================
-            print(f"\n   📌 POINT 2 - L'image miniature (thumbnail) principale:")
+            print(f"\n  POINT 2 - L'image miniature (thumbnail) principale:")
             image_principale = None
             img_selectors = ['.post-thumbnail img', '.entry-image img', '.featured-image img', 'article img', 'img']
             
@@ -96,15 +96,15 @@ class BDMScraperDetailed:
                 img = soup.select_one(selector)
                 if img and img.get('src'):
                     image_principale = img['src']
-                    print(f"      ✅ Trouvé avec '{selector}': {image_principale}")
+                    print(f"       Trouvé avec '{selector}': {image_principale}")
                     break
                 else:
-                    print(f"      ❌ Pas trouvé avec '{selector}'")
+                    print(f"       Pas trouvé avec '{selector}'")
             
             article_data['image_principale'] = image_principale
             
             # =================== POINT 3: SOUS-CATÉGORIE ===================
-            print(f"\n   📌 POINT 3 - La sous-catégorie:")
+            print(f"\n   POINT 3 - La sous-catégorie:")
             sous_categorie = "Non définie"
             cat_selectors = ['.category', '.post-category', '.entry-category', '.breadcrumb a', '.cat-links']
             
@@ -113,15 +113,15 @@ class BDMScraperDetailed:
                 if cats:
                     # Prendre la première catégorie trouvée
                     sous_categorie = cats[0].get_text().strip()
-                    print(f"      ✅ Trouvé avec '{selector}': {sous_categorie}")
+                    print(f"       Trouvé avec '{selector}': {sous_categorie}")
                     break
                 else:
-                    print(f"      ❌ Pas trouvé avec '{selector}'")
+                    print(f"       Pas trouvé avec '{selector}'")
             
             article_data['sous_categorie'] = sous_categorie
             
             # =================== POINT 4: RÉSUMÉ ===================
-            print(f"\n   📌 POINT 4 - Le résumé (extrait du champ de l'article):")
+            print(f"\n   POINT 4 - Le résumé (extrait du champ de l'article):")
             resume = ""
             content_selectors = ['.entry-content', '.post-content', 'article .content', '.content', 'article p']
             
@@ -130,16 +130,16 @@ class BDMScraperDetailed:
                 if content and content.get_text().strip():
                     text = content.get_text().strip()
                     resume = text[:300] + "..." if len(text) > 300 else text
-                    print(f"      ✅ Trouvé avec '{selector}': {len(text)} caractères")
-                    print(f"      📝 Aperçu: {resume[:100]}...")
+                    print(f"       Trouvé avec '{selector}': {len(text)} caractères")
+                    print(f"       Aperçu: {resume[:100]}...")
                     break
                 else:
-                    print(f"      ❌ Pas trouvé avec '{selector}'")
+                    print(f"       Pas trouvé avec '{selector}'")
             
             article_data['resume'] = resume
             
             # =================== POINT 5: DATE DE PUBLICATION ===================
-            print(f"\n   📌 POINT 5 - La date de publication:")
+            print(f"\n  POINT 5 - La date de publication:")
             date_publication = datetime.now().strftime('%Y-%m-%d')
             date_selectors = ['.entry-date', '.post-date', '.published', 'time', '.date']
             
@@ -152,7 +152,7 @@ class BDMScraperDetailed:
                     if datetime_attr:
                         try:
                             date_publication = datetime.fromisoformat(datetime_attr.replace('Z', '+00:00')).strftime('%Y-%m-%d')
-                            print(f"      ✅ Trouvé avec '{selector}' (datetime): {date_publication}")
+                            print(f"      Trouvé avec '{selector}' (datetime): {date_publication}")
                             break
                         except:
                             pass
@@ -162,17 +162,17 @@ class BDMScraperDetailed:
                     if match:
                         day, month, year = match.groups()
                         date_publication = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-                        print(f"      ✅ Trouvé avec '{selector}' (regex): {date_publication}")
+                        print(f"      Trouvé avec '{selector}' (regex): {date_publication}")
                         break
                     else:
-                        print(f"      ⚠️  Trouvé avec '{selector}' mais format non reconnu: '{date_text}'")
+                        print(f"       Trouvé avec '{selector}' mais format non reconnu: '{date_text}'")
                 else:
-                    print(f"      ❌ Pas trouvé avec '{selector}'")
+                    print(f"       Pas trouvé avec '{selector}'")
             
             article_data['date_publication'] = date_publication
             
             # =================== POINT 6: AUTEUR ===================
-            print(f"\n   📌 POINT 6 - L'auteur de l'article:")
+            print(f"\n  POINT 6 - L'auteur de l'article:")
             auteur = "Auteur inconnu"
             author_selectors = ['.author', '.by-author', '.entry-author', '.post-author', '.author-name']
             
@@ -180,26 +180,26 @@ class BDMScraperDetailed:
                 author = soup.select_one(selector)
                 if author and author.get_text().strip():
                     auteur = author.get_text().strip()
-                    print(f"      ✅ Trouvé avec '{selector}': {auteur}")
+                    print(f"      Trouvé avec '{selector}': {auteur}")
                     break
                 else:
-                    print(f"      ❌ Pas trouvé avec '{selector}'")
+                    print(f"       Pas trouvé avec '{selector}'")
             
             article_data['auteur'] = auteur
             
             # =================== POINT 7: CONTENU NORMALISÉ ===================
-            print(f"\n   📌 POINT 7 - Le contenu de l'article (normalisé):")
+            print(f"\n   POINT 7 - Le contenu de l'article (normalisé):")
             contenu = resume  # Utiliser le résumé comme contenu normalisé
-            print(f"      ✅ Contenu normalisé: {len(contenu)} caractères")
-            print(f"      📄 Aperçu normalisé: {contenu[:80]}...")
+            print(f"       Contenu normalisé: {len(contenu)} caractères")
+            print(f"       Aperçu normalisé: {contenu[:80]}...")
             
             article_data['contenu'] = contenu
             
             # =================== POINT 8: DICTIONNAIRE DES IMAGES ===================
-            print(f"\n   📌 POINT 8 - Un dictionnaire des images (URL + légende):")
+            print(f"\n   POINT 8 - Un dictionnaire des images (URL + légende):")
             images = {}
             all_images = soup.find_all('img')
-            print(f"      🔍 {len(all_images)} images trouvées au total")
+            print(f"       {len(all_images)} images trouvées au total")
             
             for i, img in enumerate(all_images[:5]):  # Limiter à 5 images
                 src = img.get('src', '')
@@ -218,13 +218,13 @@ class BDMScraperDetailed:
                         'legende': alt,
                         'title': title_attr
                     }
-                    print(f"      ✅ Image {i+1}: {alt[:40]}... -> {src[:60]}...")
+                    print(f"       Image {i+1}: {alt[:40]}... -> {src[:60]}...")
             
-            print(f"      📊 Total images gardées: {len(images)}")
+            print(f"     Total images gardées: {len(images)}")
             article_data['images'] = images
             
             # =================== POINT 9: SAUVEGARDE MONGODB ===================
-            print(f"\n   📌 POINT 9 - Sauvegarde des données dans une collection MongoDB:")
+            print(f"\n  POINT 9 - Sauvegarde des données dans une collection MongoDB:")
             
             # Informations supplémentaires
             article_data.update({
@@ -235,13 +235,13 @@ class BDMScraperDetailed:
                 'statut': 'scrape_reussi'
             })
             
-            print(f"      📦 Données structurées prêtes pour MongoDB")
-            print(f"      🔑 Clés: {list(article_data.keys())}")
+            print(f"      Données structurées prêtes pour MongoDB")
+            print(f"      Clés: {list(article_data.keys())}")
             
             return article_data
             
         except Exception as e:
-            print(f"      ❌ Erreur lors du scraping: {e}")
+            print(f"      Erreur lors du scraping: {e}")
             return None
 
     def save_to_mongodb(self, article):
@@ -250,35 +250,35 @@ class BDMScraperDetailed:
             # Vérifier si existe déjà
             existing = self.collection.find_one({'url': article['url']})
             if existing:
-                print(f"      ⚠️  Article déjà en base (ID: {existing['_id']})")
+                print(f"       Article déjà en base (ID: {existing['_id']})")
                 return False
             
             result = self.collection.insert_one(article)
-            print(f"      ✅ Sauvegardé en MongoDB (ID: {result.inserted_id})")
+            print(f"      Sauvegardé en MongoDB (ID: {result.inserted_id})")
             return True
             
         except Exception as e:
-            print(f"      ❌ Erreur MongoDB: {e}")
+            print(f"      Erreur MongoDB: {e}")
             return False
 
     def run_detailed_scraping(self, max_articles=3):
         """Lance le scraping détaillé"""
-        print("🚀 DÉBUT DU SCRAPING DÉTAILLÉ BDM")
+        print(" DÉBUT DU SCRAPING DÉTAILLÉ BDM")
         print("="*80)
         
         # Récupérer les URLs
         articles_info = self.get_articles_from_homepage(max_articles)
         
         if not articles_info:
-            print("❌ Aucun article trouvé")
+            print(" Aucun article trouvé")
             return
         
         # Scraper chaque article
         success = 0
         
         for i, article_info in enumerate(articles_info, 1):
-            print(f"\n📄 ARTICLE {i}/{len(articles_info)}")
-            print(f"📋 Titre aperçu: {article_info['title_preview']}")
+            print(f"\n ARTICLE {i}/{len(articles_info)}")
+            print(f" Titre aperçu: {article_info['title_preview']}")
             print("─" * 80)
             
             article = self.scrape_article_detailed(article_info['url'])
@@ -286,21 +286,21 @@ class BDMScraperDetailed:
             if article and article['titre'] != "Titre non trouvé":
                 if self.save_to_mongodb(article):
                     success += 1
-                    print(f"\n      🎉 SUCCÈS COMPLET POUR CET ARTICLE!")
+                    print(f"\n      SUCCÈS COMPLET POUR CET ARTICLE!")
                 else:
-                    print(f"\n      ⚠️  Article scrapé mais pas sauvé (doublon)")
+                    print(f"\n      Article scrapé mais pas sauvé (doublon)")
             else:
-                print(f"\n      ❌ ÉCHEC DU SCRAPING POUR CET ARTICLE")
+                print(f"\n      ÉCHEC DU SCRAPING POUR CET ARTICLE")
             
             print("=" * 80)
         
         # Statistiques finales
-        print(f"\n🎯 RÉSULTATS FINAUX DU SCRAPING")
+        print(f"\n RÉSULTATS FINAUX DU SCRAPING")
         print("=" * 60)
-        print(f"📊 Articles traités: {len(articles_info)}")
-        print(f"✅ Succès: {success}")
-        print(f"❌ Échecs: {len(articles_info) - success}")
-        print(f"📀 Total en base MongoDB: {self.collection.count_documents({})}")
+        print(f" Articles traités: {len(articles_info)}")
+        print(f" Succès: {success}")
+        print(f" Échecs: {len(articles_info) - success}")
+        print(f" Total en base MongoDB: {self.collection.count_documents({})}")
         
         # Afficher les derniers articles en base
         print(f"\n📋 Derniers articles en base:")
