@@ -174,7 +174,7 @@ class BDMScraperDetailed:
             # =================== POINT 6: AUTEUR ===================
             print(f"\n  POINT 6 - L'auteur de l'article:")
             auteur = "Auteur inconnu"
-            author_selectors = ['.author', '.by-author', '.entry-author', '.post-author', '.author-name']
+            author_selectors = ['.byline','.author', '.by-author', '.entry-author', '.post-author', '.author-name','meta-author', '.author-info', '[rel="author"]', '.vcard']
             
             for selector in author_selectors:
                 author = soup.select_one(selector)
