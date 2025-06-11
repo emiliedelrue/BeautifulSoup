@@ -201,7 +201,7 @@ class BDMScraperDetailed:
             all_images = soup.find_all('img')
             print(f"       {len(all_images)} images trouvées au total")
             
-            for i, img in enumerate(all_images[:5]):  # Limiter à 5 images
+            for i, img in enumerate(all_images[:5]):  
                 src = img.get('src', '')
                 alt = img.get('alt', f'Image {i+1}')
                 title_attr = img.get('title', '')
@@ -266,14 +266,14 @@ class BDMScraperDetailed:
         print(" DÉBUT DU SCRAPING DÉTAILLÉ BDM")
         print("="*80)
         
-        # Récupérer les URLs
+        
         articles_info = self.get_articles_from_homepage(max_articles)
         
         if not articles_info:
             print(" Aucun article trouvé")
             return
         
-        # Scraper chaque article
+        
         success = 0
         
         for i, article_info in enumerate(articles_info, 1):
@@ -292,29 +292,8 @@ class BDMScraperDetailed:
             else:
                 print(f"\n      ÉCHEC DU SCRAPING POUR CET ARTICLE")
             
-            print("=" * 80)
-        
-        # Statistiques finales
-        print(f"\n RÉSULTATS FINAUX DU SCRAPING")
-        print("=" * 60)
-        print(f" Articles traités: {len(articles_info)}")
-        print(f" Succès: {success}")
-        print(f" Échecs: {len(articles_info) - success}")
-        print(f" Total en base MongoDB: {self.collection.count_documents({})}")
-        
-        # Afficher les derniers articles en base
-        print(f"\n Derniers articles en base:")
-        for article in self.collection.find().sort('_id', -1).limit(3):
-            print(f"   • {article['titre'][:50]}")
-            print(f"     URL: {article['url'][:60]}...")
-            print(f"     Date: {article['date_publication']}")
-            print(f"     Auteur: {article['auteur']}")
-            print(f"     Images: {article['nb_images']}")
-            print()
-        
-        print("=" * 60)
 
 
 if __name__ == "__main__":
     scraper = BDMScraperDetailed()
-    scraper.run_detailed_scraping(max_articles=3)
+    scraper.run_detailed_scraping(max_articles=10)
