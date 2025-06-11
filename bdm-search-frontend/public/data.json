@@ -1,0 +1,36 @@
+{
+  "metadata": {
+    "total_articles": 2,
+    "scraping_date": "2024-01-15T10:30:00",
+    "source": "https://www.blogdumoderateur.com",
+    "version": "1.0"
+  },
+  "articles": [
+    {
+      "titre": "Les tendances du développement web en 2024",
+      "image_principale": "https://example.com/image1.jpg",
+      "categorie": "Développement",
+      "sous_categorie": "Web",
+      "resume": "Découvrez les principales tendances qui vont marquer le développement web cette année. De l'IA aux frameworks modernes, voici ce qui vous attend.",
+      "date_publication": "2024-01-15",
+      "auteur": "Thomas Martin",
+      "contenu": "Contenu détaillé de l'article...",
+      "url": "https://www.blogdumoderateur.com/article1",
+      "nb_images": 3,
+      "statut": "scrape_reussi"
+    },
+    {
+      "titre": "Intelligence artificielle et marketing digital",
+      "image_principale": "https://example.com/image2.jpg",
+      "categorie": "Marketing",
+      "sous_categorie": "IA",
+      "resume": "Comment l'IA révolutionne les stratégies marketing modernes et transforme l'expérience client.",
+      "date_publication": "2024-01-10",
+      "auteur": "Marie Dubois",
+      "contenu": "L'intelligence artificielle transforme...",
+      "url": "https://www.blogdumoderateur.com/article2",
+      "nb_images": 2,
+      "statut": "scrape_reussi"
+    }
+  ]
+}
