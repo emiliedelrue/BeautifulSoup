@@ -55,3 +55,8 @@ pip install -r requirements.txt
 ````
 python scraper_bdm.py
 ````
+
+## Suppression de la base de données
+````
+python clear.py
+````
