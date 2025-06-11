@@ -69,122 +69,116 @@ class BDMScraperDetailed:
             # =================== POINT 1: TITRE ===================
             print(f"\n   POINT 1 - Le titre de l'article:")
             titre = "Titre non trouvé"
-            title_selectors = ['h1', '.entry-title', '.post-title', 'title']
-            
-            for selector in title_selectors:
-                title_elem = soup.select_one(selector)
-                if title_elem and title_elem.get_text().strip():
-                    titre = title_elem.get_text().strip()
-                    print(f"      Trouvé avec '{selector}': {titre}")
-                    break
-                else:
-                    print(f"      Pas trouvé avec '{selector}'")
+            selector = 'h1'  
+
+            title_elem = soup.select_one(selector)
+            if title_elem and title_elem.get_text().strip():
+                titre = title_elem.get_text().strip()
+                print(f"      Trouvé avec '{selector}': {titre}")
+            else:
+                print(f"      Pas trouvé avec '{selector}'")
             
             article_data['titre'] = titre
             
-            # =================== POINT 2: IMAGE MINIATURE ===================
-            print(f"\n  POINT 2 - L'image miniature (thumbnail) principale:")
+            # =================== POINT 2: IMAGE PRINCIPAL ===================
+            print(f"\n  POINT 2 - L'image principale:")
             image_principale = None
-            img_selectors = ['.post-thumbnail img', '.entry-image img', '.featured-image img', 'article img', 'img']
+            selector = 'article img'
             
-            for selector in img_selectors:
-                img = soup.select_one(selector)
-                if img and img.get('src'):
-                    image_principale = img['src']
-                    print(f"       Trouvé avec '{selector}': {image_principale}")
-                    break
-                else:
-                    print(f"       Pas trouvé avec '{selector}'")
+            img = soup.select_one(selector)
+            if img and img.get('src'):
+                image_principale = img['src']
+                print(f"       Trouvé avec '{selector}': {image_principale}")
+            else:
+                print(f"       Pas trouvé avec '{selector}'")
             
             article_data['image_principale'] = image_principale
             
             # =================== POINT 3: SOUS-CATÉGORIE ===================
             print(f"\n   POINT 3 - La sous-catégorie:")
             sous_categorie = "Non définie"
-            cat_selectors = ['.category', '.post-category', '.entry-category', '.breadcrumb a', '.cat-links']
-            
-            for selector in cat_selectors:
-                cats = soup.select(selector)
-                if cats:
-                    sous_categorie = cats[0].get_text().strip()
+            selector = 'meta[property="article:tag"]'
+
+            try:
+                cats = soup.select_one(selector)
+                if cats and cats.get('content'):
+                    sous_categorie = cats.get('content').strip()
                     print(f"       Trouvé avec '{selector}': {sous_categorie}")
-                    break
                 else:
                     print(f"       Pas trouvé avec '{selector}'")
-            
+            except Exception as e:
+                print(f"       Pas trouvé avec '{selector}'")
+
             article_data['sous_categorie'] = sous_categorie
-            
+
             # =================== POINT 4: RÉSUMÉ ===================
             print(f"\n   POINT 4 - Le résumé (extrait du champ de l'article):")
             resume = ""
-            content_selectors = ['.entry-content', '.post-content', 'article .content', '.content', 'article p']
+            selector = 'meta[name="description"]'
             
-            for selector in content_selectors:
-                content = soup.select_one(selector)
-                if content and content.get_text().strip():
-                    text = content.get_text().strip()
-                    resume = text[:300] + "..." if len(text) > 300 else text
-                    print(f"       Trouvé avec '{selector}': {len(text)} caractères")
-                    print(f"       Aperçu: {resume[:100]}...")
-                    break
-                else:
-                    print(f"       Pas trouvé avec '{selector}'")
+            content = soup.select_one(selector)
+            if content and content.get('content'):  
+                resume = content.get('content').strip()  
+                print(f"       Trouvé avec '{selector}': {resume}")
+            else:
+                print(f"       Pas trouvé avec '{selector}'")
             
             article_data['resume'] = resume
             
             # =================== POINT 5: DATE DE PUBLICATION ===================
             print(f"\n  POINT 5 - La date de publication:")
             date_publication = datetime.now().strftime('%Y-%m-%d')
-            date_selectors = ['.entry-date', '.post-date', '.published', 'time', '.date']
+            selector = '.entry-date'
             
-            for selector in date_selectors:
-                date_elem = soup.select_one(selector)
-                if date_elem:
-                    date_text = date_elem.get_text().strip()
-                    datetime_attr = date_elem.get('datetime')
-                    
-                    if datetime_attr:
-                        try:
-                            date_publication = datetime.fromisoformat(datetime_attr.replace('Z', '+00:00')).strftime('%Y-%m-%d')
-                            print(f"      Trouvé avec '{selector}' (datetime): {date_publication}")
-                            break
-                        except:
-                            pass
+            date_elem = soup.select_one(selector)
+            if date_elem:
+                date_text = date_elem.get_text().strip()
+                datetime_attr = date_elem.get('datetime')
+                
+                if datetime_attr:
+                    try:
+                        date_publication = datetime.fromisoformat(datetime_attr.replace('Z', '+00:00')).strftime('%Y-%m-%d')
+                        print(f"      Trouvé avec '{selector}' (datetime): {date_publication}")
+                    except:
+                        pass
 
-                    match = re.search(r'(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})', date_text)
-                    if match:
-                        day, month, year = match.groups()
-                        date_publication = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-                        print(f"      Trouvé avec '{selector}' (regex): {date_publication}")
-                        break
-                    else:
-                        print(f"       Trouvé avec '{selector}' mais format non reconnu: '{date_text}'")
+                match = re.search(r'(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})', date_text)
+                if match:
+                    day, month, year = match.groups()
+                    date_publication = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                    print(f"      Trouvé avec '{selector}' (regex): {date_publication}")
                 else:
-                    print(f"       Pas trouvé avec '{selector}'")
+                    print(f"       Trouvé avec '{selector}' mais format non reconnu: '{date_text}'")
+            else:
+                print(f"       Pas trouvé avec '{selector}'")
             
             article_data['date_publication'] = date_publication
             
             # =================== POINT 6: AUTEUR ===================
             print(f"\n  POINT 6 - L'auteur de l'article:")
             auteur = "Auteur inconnu"
-            author_selectors = ['.byline','.author', '.by-author', '.entry-author', '.post-author', '.author-name','meta-author', '.author-info', '[rel="author"]', '.vcard']
+            selector= '.byline'
             
-            for selector in author_selectors:
-                author = soup.select_one(selector)
-                if author and author.get_text().strip():
-                    auteur = author.get_text().strip()
-                    print(f"      Trouvé avec '{selector}': {auteur}")
-                    break
-                else:
-                    print(f"       Pas trouvé avec '{selector}'")
+            author = soup.select_one(selector)
+            if author and author.get_text().strip():
+                auteur = author.get_text().strip()
+                print(f"      Trouvé avec '{selector}': {auteur}")
+            else:
+                print(f"       Pas trouvé avec '{selector}'")
             
             article_data['auteur'] = auteur
             
             # =================== POINT 7: CONTENU NORMALISÉ ===================
             print(f"\n   POINT 7 - Le contenu de l'article (normalisé):")
-            contenu = resume  
-            print(f"       Contenu normalisé: {len(contenu)} caractères")
-            print(f"       Aperçu normalisé: {contenu[:80]}...")
+            selector = 'div.entry-content:not(article img)'
+            
+            content_elem = soup.select_one(selector) 
+            if content_elem and content_elem.get_text().strip():
+                contenu = content_elem.get_text().strip()  
+                print(f"      Trouvé avec '{selector}': {len(contenu)} caractères")  
+            else:
+                contenu = ""  
+                print(f"       Pas trouvé avec '{selector}'")
             
             article_data['contenu'] = contenu
             
